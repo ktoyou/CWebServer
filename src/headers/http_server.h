@@ -8,15 +8,22 @@
 
 #include "http_headers.h"
 
-#define MAX_FILE_SIZE   128000
-#define MAX_BUFFER_SIZE 128000
-#define MAX_PATH_SIZE   1024
+#define MAX_FILE_SIZE       128000
+#define MAX_BUFFER_SIZE     128000
+#define MAX_PATH_SIZE       1024
+#define MAX_ROUTE_FILE_SIZE 1024
 
 struct http_server_config {
     int port;
     int max_queue;
     char *addr;
     char *content_folder;
+};
+
+struct http_route_node {
+    char *route_name;
+    char *file;
+    struct http_route_node *next;
 };
 
 struct http_server_info {
@@ -70,7 +77,65 @@ struct http_request_header read_http_request_header(int request_fd) {
     return convert_buffer_to_http_request_header(buf);
 }
 
-int start_http_server(struct http_server_info server_info, struct http_server_config server_config) {    
+struct http_route_node *find_http_route_node_by_route_name(char *route_name, struct http_route_node *root) {
+    struct http_route_node *current = root;
+    while(current) {
+        if(strcmp(route_name, current->route_name) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+}
+
+struct http_route_node *find_http_route_node_by_file(char *file, struct http_route_node *root) {
+    struct http_route_node *current = root;
+    while(current) {
+        if(strcmp(file, current->file)) {
+            return current;
+        }
+        current = current->next;
+    }
+}
+
+int load_http_routes(char *path, struct http_route_node **root) {
+    FILE *file;
+    file = fopen(path, "r");
+
+    char *buffer = (char*)calloc(MAX_ROUTE_FILE_SIZE, sizeof(char));
+    struct http_route_node *current = NULL;
+
+    if(file) {
+        ssize_t bytes = fread(buffer, 1, MAX_ROUTE_FILE_SIZE, file);
+
+        char *current_line = strtok(buffer, "\n");
+        int offset = 0;
+
+        while (current_line)
+        {
+            struct http_route_node *next = (struct http_route_node*)malloc(sizeof(struct http_route_node));
+            offset += strlen(current_line);
+
+            char *route = strtok(current_line, "::");
+            next->route_name = route;
+
+            char *path = strtok(NULL, "::");
+            next->file = path;
+
+            next->next = NULL;
+
+            if(!current) *root = next;
+            else current->next = next;
+
+            offset++;
+            current_line = strtok(buffer + offset, "\n");
+            current = next;
+        }
+    }
+
+    return 0;
+}
+
+int start_http_server(struct http_server_info server_info, struct http_server_config server_config, struct http_route_node *routes) {    
     int listen_status = listen(server_info.fd, server_config.max_queue);
     if(listen_status < 0) {
         perror("Error listen: \n");
@@ -92,8 +157,12 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
             struct http_request_header request_header = read_http_request_header(accepted_fd);
             printf("%s request %s\n", request_header.method, request_header.path);
 
+            struct http_route_node *route = find_http_route_node_by_route_name(request_header.path, routes);
+
             strcat(full_path, server_config.content_folder);
-            strcat(full_path, request_header.path);
+            strcat(full_path, route->file);
+
+            printf("%s\n", full_path);
 
             FILE *file = NULL;
             file = fopen(full_path, "r");
