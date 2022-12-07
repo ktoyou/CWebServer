@@ -162,9 +162,7 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
             if(route) {
                 strcat(full_path, server_config.content_folder);
                 strcat(full_path, route->file);
-
-                printf("%s\n", full_path);
-
+                
                 FILE *file = NULL;
                 file = fopen(full_path, "r");
             
