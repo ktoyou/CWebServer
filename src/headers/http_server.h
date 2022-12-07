@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #include "http_headers.h"
+#include "http_responses.h"
 
 #define MAX_FILE_SIZE       128000
 #define MAX_BUFFER_SIZE     128000
@@ -157,7 +158,7 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
             struct http_request_header request_header = read_http_request_header(accepted_fd);
             struct http_route_node *route = find_http_route_node_by_route_name(request_header.path, routes);
             printf("%s request %s\n", request_header.method, request_header.path);
-            
+
             if(route) {
                 strcat(full_path, server_config.content_folder);
                 strcat(full_path, route->file);
@@ -174,10 +175,13 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
 
                     fclose(file);
                 } else {
+                    char *internal_server_error_page = get_internal_server_error_page();
                     put_http_header_to_buffer(get_internal_server_error_http_header(), buffer);
+                    put_default_page_to_buffer(get_internal_server_error_page(), buffer);
                 }
             } else {
-                put_http_header_to_buffer(get_not_found_http_header(), buffer); 
+                put_http_header_to_buffer(get_not_found_http_header(), buffer);
+                put_default_page_to_buffer(get_not_found_page(), buffer);
             }
 
             ssize_t sended_bytes = send(accepted_fd, buffer, MAX_BUFFER_SIZE, 0);
