@@ -155,14 +155,13 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
             char *full_path = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
 
             struct http_request_header request_header = read_http_request_header(accepted_fd);
-            printf("%s request %s\n", request_header.method, request_header.path);
-
             struct http_route_node *route = find_http_route_node_by_route_name(request_header.path, routes);
-
+            printf("%s request %s\n", request_header.method, request_header.path);
+            
             if(route) {
                 strcat(full_path, server_config.content_folder);
                 strcat(full_path, route->file);
-                
+
                 FILE *file = NULL;
                 file = fopen(full_path, "r");
             
