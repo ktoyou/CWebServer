@@ -159,24 +159,28 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
 
             struct http_route_node *route = find_http_route_node_by_route_name(request_header.path, routes);
 
-            strcat(full_path, server_config.content_folder);
-            strcat(full_path, route->file);
+            if(route) {
+                strcat(full_path, server_config.content_folder);
+                strcat(full_path, route->file);
 
-            printf("%s\n", full_path);
+                printf("%s\n", full_path);
 
-            FILE *file = NULL;
-            file = fopen(full_path, "r");
-        
-            if(file) {
-                put_http_header_to_buffer(get_successful_http_header(), buffer);
+                FILE *file = NULL;
+                file = fopen(full_path, "r");
+            
+                if(file) {
+                    put_http_header_to_buffer(get_successful_http_header(), buffer);
 
-                char content[MAX_FILE_SIZE];
-                ssize_t readed = fread(content, 1, MAX_FILE_SIZE, file);
-                memcpy(buffer + HTTP_HEADER_SIZE * sizeof(char), content, readed);
+                    char content[MAX_FILE_SIZE];
+                    ssize_t readed = fread(content, 1, MAX_FILE_SIZE, file);
+                    memcpy(buffer + HTTP_HEADER_SIZE * sizeof(char), content, readed);
 
-                fclose(file);
+                    fclose(file);
+                } else {
+                    put_http_header_to_buffer(get_internal_server_error_http_header(), buffer);
+                }
             } else {
-                put_http_header_to_buffer(get_not_found_http_header(), buffer);
+                put_http_header_to_buffer(get_not_found_http_header(), buffer); 
             }
 
             ssize_t sended_bytes = send(accepted_fd, buffer, MAX_BUFFER_SIZE, 0);

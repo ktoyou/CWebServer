@@ -8,8 +8,8 @@
 
 #define HTTP_NOT_FOUND             "HTTP/1.1 404 NOT FOUND\r\n"
 #define HTTP_SUCCESSFUL            "HTTP/1.1 200 OK\r\n"
-#define HTTP_FORBIDDEN             "HTTP/1.1 403 FORBIDDEN\r\n"
-#define HTTP_INTERNAL_SERVER_ERROR "HTTP/1.1 500 INTERNAL SERVER ERROR\r\n"
+#define HTTP_FORBIDDEN             "HTTP/1.1 403 Forbidden\r\n"
+#define HTTP_INTERNAL_SERVER_ERROR "HTTP/1.1 500 Internal Server Error\r\n"
 
 #define HTTP_HEADER_SIZE           256
 
