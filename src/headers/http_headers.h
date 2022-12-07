@@ -19,6 +19,12 @@ struct http_header {
     char *connection;
 };
 
+struct http_request_header {
+    char *path;
+    char *version;
+    char *method;
+};
+
 char *convert_http_header_to_buffer(struct http_header header) {
     char *buffer = (char*)calloc(HTTP_HEADER_SIZE, sizeof(char));
 
@@ -71,4 +77,15 @@ struct http_header get_internal_server_error_http_header() {
     header.content_type = CONTENT_TYPE_TEXT_HTML;
 
     return header;
+}
+
+struct http_request_header convert_buffer_to_http_request_header(char *buffer) {
+    struct http_request_header request_header;
+    char *header = strtok(buffer, "\r\n");    
+
+    request_header.method = strtok(header, " ");
+    request_header.path = strtok(NULL, " ");
+    request_header.version = strtok(NULL, " ");
+
+    return request_header;
 }

@@ -8,11 +8,12 @@
 
 #include "http_headers.h"
 
-#define MAX_FILE_SIZE 128000
+#define MAX_FILE_SIZE   128000
+#define MAX_BUFFER_SIZE 128000
+#define MAX_PATH_SIZE   1024
 
 struct http_server_config {
     int port;
-    int max_buffer_size;
     int max_queue;
     char *addr;
     char *content_folder;
@@ -63,6 +64,12 @@ int accept_connection(int fd, struct sockaddr *accepted_addr, socklen_t *accepte
     return accepted_fd;
 }
 
+struct http_request_header read_http_request_header(int request_fd) {
+    char buf[MAX_BUFFER_SIZE];
+    read(request_fd, buf, MAX_BUFFER_SIZE);
+    return convert_buffer_to_http_request_header(buf);
+}
+
 int start_http_server(struct http_server_info server_info, struct http_server_config server_config) {    
     int listen_status = listen(server_info.fd, server_config.max_queue);
     if(listen_status < 0) {
@@ -79,11 +86,18 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
         int accepted_fd = accept_connection(server_info.fd, &accepted_addr, &accepted_addr_size);
 
         if(accepted_fd > 0) {
-            FILE *file;
-            file = fopen("src/index.html", "r");
+            char *buffer = (char*)calloc(MAX_BUFFER_SIZE, sizeof(char));
+            char *full_path = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
 
-            char *buffer = (char*)calloc(server_config.max_buffer_size, sizeof(char));
+            struct http_request_header request_header = read_http_request_header(accepted_fd);
+            printf("%s request %s\n", request_header.method, request_header.path);
 
+            strcat(full_path, server_config.content_folder);
+            strcat(full_path, request_header.path);
+
+            FILE *file = NULL;
+            file = fopen(full_path, "r");
+        
             if(file) {
                 put_http_header_to_buffer(get_successful_http_header(), buffer);
 
@@ -96,10 +110,11 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
                 put_http_header_to_buffer(get_not_found_http_header(), buffer);
             }
 
-            ssize_t sended_bytes = send(accepted_fd, buffer, server_config.max_buffer_size, 0);
+            ssize_t sended_bytes = send(accepted_fd, buffer, MAX_BUFFER_SIZE, 0);
             printf("Sended %zd bytes\n", sended_bytes);
 
             free(buffer);
+            free(full_path);
             close(accepted_fd);
         }
     }
