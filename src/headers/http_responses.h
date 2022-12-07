@@ -21,9 +21,9 @@ char *get_forbidden_page() {
 }
 
 char *get_not_found_page() {
-    return configure_default_response_page("404 Not Found");;
+    return configure_default_response_page("404 Not Found");
 }
 
 char *get_internal_server_error_page() {
-    return configure_default_response_page("500 Internal Server Error");;
+    return configure_default_response_page("500 Internal Server Error");
 }
