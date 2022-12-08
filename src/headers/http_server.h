@@ -8,23 +8,22 @@
 
 #include "http_headers.h"
 #include "http_responses.h"
+#include "http_routes.h"
 
 #define MAX_FILE_SIZE       128000
 #define MAX_BUFFER_SIZE     128000
 #define MAX_PATH_SIZE       1024
-#define MAX_ROUTE_FILE_SIZE 1024
+
+struct http_request {
+    int request_fd;
+    struct http_request_header header;
+};
 
 struct http_server_config {
     int port;
     int max_queue;
     char *addr;
     char *content_folder;
-};
-
-struct http_route_node {
-    char *route_name;
-    char *file;
-    struct http_route_node *next;
 };
 
 struct http_server_info {
@@ -56,6 +55,7 @@ struct http_server_info configure_http_server(struct http_server_config config) 
     int bind_status = bind(fd, (const struct sockaddr*)&addr, addr_size);
     if(bind_status < 0) {
         perror("Error bind: ");
+        exit(-1);
     }
 
     info.fd = fd;
@@ -78,94 +78,52 @@ struct http_request_header read_http_request_header(int request_fd) {
     return convert_buffer_to_http_request_header(buf);
 }
 
-struct http_route_node *find_http_route_node_by_route_name(char *route_name, struct http_route_node *root) {
-    struct http_route_node *current = root;
-    while(current) {
-        if(strcmp(route_name, current->route_name) == 0) {
-            return current;
-        }
-        current = current->next;
-    }
+struct http_request accept_http_request(int fd, struct sockaddr *accepted_addr, socklen_t *accepted_addr_size) {
+    int client_fd = accept_connection(fd, accepted_addr, accepted_addr_size);
+    
+    struct http_request request;
+    request.request_fd = client_fd;
+    request.header = read_http_request_header(client_fd);
+
+    return request;
 }
 
-struct http_route_node *find_http_route_node_by_file(char *file, struct http_route_node *root) {
-    struct http_route_node *current = root;
-    while(current) {
-        if(strcmp(file, current->file)) {
-            return current;
-        }
-        current = current->next;
-    }
-}
-
-int load_http_routes(char *path, struct http_route_node **root) {
-    FILE *file;
-    file = fopen(path, "r");
-
-    char *buffer = (char*)calloc(MAX_ROUTE_FILE_SIZE, sizeof(char));
-    struct http_route_node *current = NULL;
-
-    if(file) {
-        ssize_t bytes = fread(buffer, 1, MAX_ROUTE_FILE_SIZE, file);
-
-        char *current_line = strtok(buffer, "\n");
-        int offset = 0;
-
-        while (current_line)
-        {
-            struct http_route_node *next = (struct http_route_node*)malloc(sizeof(struct http_route_node));
-            offset += strlen(current_line);
-
-            char *route = strtok(current_line, "::");
-            next->route_name = route;
-
-            char *path = strtok(NULL, "::");
-            next->file = path;
-
-            next->next = NULL;
-
-            if(!current) *root = next;
-            else current->next = next;
-
-            offset++;
-            current_line = strtok(buffer + offset, "\n");
-            current = next;
-        }
-    }
-
-    return 0;
-}
-
-int start_http_server(struct http_server_info server_info, struct http_server_config server_config, struct http_route_node *routes) {    
+int start_listening(struct http_server_info server_info, struct http_server_config server_config) {
     int listen_status = listen(server_info.fd, server_config.max_queue);
     if(listen_status < 0) {
         perror("Error listen: \n");
+        exit(-1);
         return -1;
     }
 
-    printf("Listening on %s:%i\n", server_config.addr, server_config.port);
+    return listen_status;
+}
+
+int start_http_server(struct http_server_info *server_info, struct http_server_config *server_config, struct http_route_node *routes) {    
+    start_listening(*server_info, *server_config);
+
+    printf("Listening on %s:%i\n", server_config->addr, server_config->port);
 
     while(1) {
         struct sockaddr accepted_addr;
         socklen_t accepted_addr_size;
 
-        int accepted_fd = accept_connection(server_info.fd, &accepted_addr, &accepted_addr_size);
+        struct http_request http_request = accept_http_request(server_info->fd, &accepted_addr, &accepted_addr_size);
 
-        if(accepted_fd > 0) {
+        if(http_request.request_fd > 0) {
+            struct http_route_node *route = find_http_route_node_by_route_name(http_request.header.path, routes);
+            printf("%s request %s\n", http_request.header.method, http_request.header.path);
+
             char *buffer = (char*)calloc(MAX_BUFFER_SIZE, sizeof(char));
             char *full_path = (char*)calloc(MAX_PATH_SIZE, sizeof(char));
 
-            struct http_request_header request_header = read_http_request_header(accepted_fd);
-            struct http_route_node *route = find_http_route_node_by_route_name(request_header.path, routes);
-            printf("%s request %s\n", request_header.method, request_header.path);
-
             if(route) {
-                strcat(full_path, server_config.content_folder);
+                strcat(full_path, server_config->content_folder);
                 strcat(full_path, route->file);
 
                 FILE *file = NULL;
                 file = fopen(full_path, "r");
-            
+                
                 if(file) {
                     put_http_header_to_buffer(get_successful_http_header(), buffer);
 
@@ -175,21 +133,20 @@ int start_http_server(struct http_server_info server_info, struct http_server_co
 
                     fclose(file);
                 } else {
-                    char *internal_server_error_page = get_internal_server_error_page();
                     put_http_header_to_buffer(get_internal_server_error_http_header(), buffer);
                     put_default_page_to_buffer(get_internal_server_error_page(), buffer);
                 }
             } else {
                 put_http_header_to_buffer(get_not_found_http_header(), buffer);
                 put_default_page_to_buffer(get_not_found_page(), buffer);
-            }
+            }   
 
-            ssize_t sended_bytes = send(accepted_fd, buffer, MAX_BUFFER_SIZE, 0);
+            ssize_t sended_bytes = send(http_request.request_fd, buffer, MAX_BUFFER_SIZE, 0);
             printf("Sended %zd bytes\n", sended_bytes);
 
             free(buffer);
             free(full_path);
-            close(accepted_fd);
+            close(http_request.request_fd);
         }
     }
 
